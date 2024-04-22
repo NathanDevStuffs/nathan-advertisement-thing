@@ -1,8 +1,62 @@
 <!DOCTYPE html>
 <html>
   <head><title>Advertisement</title></head>
-  <body>
-<img src="" alt="Advertisement" id="ad">
-    
-  </body>
-</html>
+  <body style="
+    background-color: black;
+
+">
+
+<center><img alt="Advertisement" id="imgad" style="
+    border-radius: 50px;
+    height: 70vh;
+    width: auto;
+display: none;
+" src=""><video style="border-radius: 50px; display: none;" src="" id="vidad"></video></center>
+<footer><img src="//greenbottlelabs.us.to/logo-PhotoRoom.png-PhotoRoom.png" style="
+    display: inline;
+    width: 150px;
+"></footer>
+    <script>
+  // Define image and video links
+  var pictureTable = [
+    "https://d2z1w4aiblvrwu.cloudfront.net/ad/owwn/honey-nut-cheerios-make-your-heart-grin-small-10.jpg",
+    // Add more image links as needed
+  ];
+
+  var videoTable = [
+    "https://allandrivegazette.good-newz.org/advertwhopper.mp4",
+    // Add more video links as needed
+  ];
+
+  // Function to randomly choose an item from an array
+  function getRandomItem(array) {
+    return array[Math.floor(Math.random() * array.length)];
+  }
+
+  // Function to change the ad every ten seconds
+  function changeAd() {
+    // Randomly choose between picture and video
+    var chooseAd = Math.random() < 0.5 ? "picture" : "video";
+
+    // Get the ad element
+    var adElement = document.getElementById("imgad");
+
+    // Set the source based on the chosen ad type
+    if (chooseAd === "picture") {
+      adElement.src = getRandomItem(pictureTable);
+      adElement.style.display = "block";
+    } else {
+      adElement = document.getElementById("vidad");
+      adElement.src = getRandomItem(videoTable);
+      adElement.style.display = "block";
+    }
+  }
+
+  // Call changeAd function initially
+  changeAd();
+
+  // Call changeAd function every ten seconds
+  setInterval(changeAd, 10000);
+</script>
+
+    </html>
