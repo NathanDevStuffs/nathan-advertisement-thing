@@ -40,15 +40,18 @@ display: none;
 
     // Get the ad element
     var adElement = document.getElementById("imgad");
+    var vidadElement = document.getElementById("vidad");
 
     // Set the source based on the chosen ad type
     if (chooseAd === "picture") {
       adElement.src = getRandomItem(pictureTable);
       adElement.style.display = "block";
+      vidadElement.style.display = "none";
     } else {
-      adElement = document.getElementById("vidad");
-      adElement.src = getRandomItem(videoTable);
-      adElement.style.display = "block";
+      vidadElement = document.getElementById("vidad");
+      vidadElement.src = getRandomItem(videoTable);
+      vidadElement.style.display = "block";
+      adElement.style.display = "none";
     }
   }
 
