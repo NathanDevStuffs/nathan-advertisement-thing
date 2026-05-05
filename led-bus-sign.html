@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LED Bus Destination Sign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+/* ── TOKENS ───────────────────────────────────────────────────────── */
+:root {
+  --amber:        #E87000;
+  --amber-bright: #FF9500;
+  --amber-dim:    #5a3800;
+  --black:        #060606;
+  --red:          #FF3B30;
+  --green:        #34C759;
+  --setup-bg:     #111317;
+  --setup-panel:  #16181d;
+  --setup-border: #252830;
+  --setup-text:   #d0d4de;
+  --setup-muted:  #6b7280;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--setup-bg);
+  color: var(--setup-text);
+  font-family: 'Share Tech Mono', monospace;
+  height: 100vh; overflow: hidden;
+  user-select: none;
+}
+.view { display: none; width: 100%; height: 100vh; }
+.view.active { display: flex; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   SETUP VIEW
+═══════════════════════════════════════════════════════════════════ */
+#setup-view { flex-direction: column; background: var(--setup-bg); }
+
+.setup-topbar {
+  flex-shrink: 0;
+  display: flex; align-items: center; gap: 14px;
+  padding: 11px 18px;
+  background: var(--setup-panel);
+  border-bottom: 1px solid var(--setup-border);
+}
+.brand {
+  display: flex; align-items: center; gap: 9px;
+  font-family: 'DotGothic16', monospace;
+  font-size: 14px; letter-spacing: 0.1em; color: var(--amber);
+  white-space: nowrap;
+}
+.brand-icon {
+  width: 26px; height: 16px; background: var(--amber);
+  border-radius: 2px; display: flex; align-items: center;
+  justify-content: center; position: relative; overflow: hidden;
+}
+.brand-icon::before {
+  content: ''; position: absolute; inset: 0;
+  background: repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.35) 3px,rgba(0,0,0,0.35) 4px);
+}
+.brand-icon::after { content: 'BUS'; font-size: 5.5px; color: #000; font-weight: 900; font-family: monospace; z-index: 1; }
+.topbar-div { width: 1px; height: 26px; background: var(--setup-border); flex-shrink: 0; }
+.topbar-fields { display: flex; align-items: center; gap: 10px; flex: 1; flex-wrap: wrap; }
+.fg { display: flex; align-items: center; gap: 6px; }
+.fg label { font-size: 9px; color: var(--setup-muted); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; }
+.fg input {
+  background: var(--setup-bg); border: 1px solid var(--setup-border); border-radius: 4px;
+  color: var(--setup-text); font-family: 'Share Tech Mono', monospace;
+  font-size: 12px; padding: 5px 8px; outline: none; width: 105px;
+  transition: border-color .15s;
+}
+.fg input:focus { border-color: var(--amber-dim); }
+.fg input::placeholder { color: var(--setup-muted); }
+.launch-btn {
+  margin-left: auto; flex-shrink: 0;
+  background: var(--amber); color: #000; border: none; border-radius: 5px;
+  padding: 8px 16px; font-family: 'DotGothic16', monospace; font-size: 12px;
+  letter-spacing: 0.08em; cursor: pointer;
+  box-shadow: 0 0 14px rgba(232,112,0,0.3);
+  transition: background .15s, box-shadow .15s;
+}
+.launch-btn:hover { background: var(--amber-bright); box-shadow: 0 0 22px rgba(232,112,0,0.5); }
+.launch-btn:active { transform: scale(0.97); }
+
+.setup-main { flex: 1; display: flex; overflow: hidden; }
+.setup-sidebar {
+  width: 270px; flex-shrink: 0; background: var(--setup-panel);
+  border-right: 1px solid var(--setup-border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.sidebar-header {
+  padding: 12px 14px 9px; border-bottom: 1px solid var(--setup-border);
+  display: flex; align-items: center; gap: 8px;
+}
+.sidebar-header h3 { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--setup-muted); font-weight: 400; }
+.stop-count-badge { margin-left: auto; background: var(--amber-dim); color: var(--amber); font-size: 10px; padding: 2px 7px; border-radius: 20px; font-family: 'DotGothic16', monospace; }
+.stop-list { flex: 1; overflow-y: auto; padding: 7px; }
+.stop-list::-webkit-scrollbar { width: 3px; }
+.stop-list::-webkit-scrollbar-thumb { background: var(--setup-border); border-radius: 3px; }
+.stop-item {
+  display: flex; align-items: center; gap: 7px; padding: 8px 9px;
+  border-radius: 4px; border: 1px solid var(--setup-border); margin-bottom: 5px;
+  cursor: default; background: var(--setup-bg); transition: border-color .15s, background .15s;
+}
+.stop-item:hover { border-color: var(--amber-dim); background: rgba(232,112,0,0.03); }
+.stop-item.at-stop { border-color: var(--amber); box-shadow: 0 0 8px rgba(232,112,0,0.2); }
+.stop-index { width: 19px; height: 19px; background: var(--amber-dim); color: var(--amber); border-radius: 3px; font-size: 9px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-family: 'DotGothic16', monospace; }
+.stop-info { flex: 1; min-width: 0; }
+.stop-name-label { font-size: 11px; color: var(--setup-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stop-coords { font-size: 9px; color: var(--setup-muted); margin-top: 1px; }
+.stop-delete { width: 20px; height: 20px; border: none; background: none; color: #2e2e3e; cursor: pointer; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 12px; transition: color .15s, background .15s; }
+.stop-delete:hover { color: var(--red); background: rgba(255,59,48,0.1); }
+.no-stops { text-align: center; padding: 36px 14px; color: var(--setup-muted); font-size: 11px; line-height: 1.7; }
+.no-stops span { display: block; font-size: 26px; margin-bottom: 9px; opacity: 0.25; }
+.setup-statusbar { padding: 7px 14px; border-top: 1px solid var(--setup-border); display: flex; align-items: center; gap: 7px; font-size: 9px; color: var(--setup-muted); letter-spacing: 0.06em; }
+.status-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--setup-muted); flex-shrink: 0; }
+.status-dot.active { background: var(--green); box-shadow: 0 0 4px var(--green); }
+.map-wrap { flex: 1; position: relative; }
+#map { width: 100%; height: 100%; }
+.map-hint { position: absolute; bottom: 16px; right: 16px; z-index: 1000; background: rgba(14,14,14,0.88); border: 1px solid var(--setup-border); border-radius: 5px; padding: 9px 12px; font-size: 10px; color: var(--setup-muted); line-height: 1.6; pointer-events: none; backdrop-filter: blur(6px); }
+.map-hint strong { color: var(--amber); display: block; margin-bottom: 3px; }
+
+/* leaflet */
+.leaflet-container { background: #13161b; }
+.leaflet-control-attribution { display: none; }
+.leaflet-popup-content-wrapper { background: var(--setup-panel); border: 1px solid var(--setup-border); color: var(--setup-text); border-radius: 5px; font-family: 'Share Tech Mono', monospace; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+.leaflet-popup-tip { background: var(--setup-panel); }
+.leaflet-popup-content { margin: 10px 13px; font-size: 11px; }
+.popup-title { font-size: 13px; color: var(--amber); margin-bottom: 5px; font-family: 'DotGothic16', monospace; }
+.popup-name-input { background: var(--setup-bg); border: 1px solid var(--setup-border); border-radius: 3px; color: var(--setup-text); font-family: 'Share Tech Mono', monospace; font-size: 11px; padding: 4px 7px; outline: none; width: 100%; margin-top: 4px; }
+.popup-save { margin-top: 7px; width: 100%; background: var(--amber); color: #000; border: none; border-radius: 3px; padding: 5px; font-family: 'DotGothic16', monospace; font-size: 11px; cursor: pointer; letter-spacing: 0.08em; }
+.popup-save:hover { background: var(--amber-bright); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   DISPLAY VIEW — SINGLE-LINE LED SIGN
+═══════════════════════════════════════════════════════════════════ */
+#display-view {
+  flex-direction: column;
+  background: var(--black);
+}
+
+/* The sign face — entire screen */
+.led-sign {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  background-color: var(--black);
+  /* Unlit LED dot-grid */
+  background-image: radial-gradient(circle, #160b00 1.3px, transparent 1.3px);
+  background-size: 8px 8px;
+}
+
+/* Horizontal scanlines */
+.led-sign::before {
+  content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.13) 0px, rgba(0,0,0,0.13) 1px, transparent 1px, transparent 5px);
+}
+/* Vignette */
+.led-sign::after {
+  content: ''; position: absolute; inset: 0; z-index: 4; pointer-events: none;
+  background: radial-gradient(ellipse 110% 80% at center, transparent 45%, rgba(0,0,0,0.8) 100%);
+}
+
+/* The clipping viewport for the text row */
+.led-viewport {
+  position: relative; z-index: 5;
+  width: 100%; overflow: hidden;
+  /* one text line high */
+  font-size: clamp(36px, 10.5vw, 108px);
+  height: 1.2em;
+  line-height: 1.2;
+  padding: 0 24px;
+}
+
+/* The actual LED text element */
+.led-text {
+  display: inline-block;
+  white-space: nowrap;
+  font-family: 'DotGothic16', monospace;
+  font-size: 1em;
+  color: var(--amber);
+  letter-spacing: 0.05em;
+  text-shadow:
+    0 0  5px rgba(232,112,0,1),
+    0 0 14px rgba(232,112,0,0.65),
+    0 0 32px rgba(232,112,0,0.35),
+    0 0 70px rgba(232,112,0,0.15);
+  will-change: transform;
+  /* transitions are set dynamically by JS */
+}
+
+/* Status strip */
+.led-status {
+  flex-shrink: 0;
+  height: 32px;
+  background: #080808;
+  border-top: 1px solid #180c00;
+  display: flex; align-items: center;
+  padding: 0 14px; gap: 12px;
+  position: relative; z-index: 10;
+}
+.geo-pip { display: flex; align-items: center; gap: 5px; font-family: 'Share Tech Mono', monospace; font-size: 9px; color: #2e2010; letter-spacing: 0.08em; }
+.geo-pip-dot { width: 5px; height: 5px; border-radius: 50%; background: #1e1408; flex-shrink: 0; transition: background .3s, box-shadow .3s; }
+.geo-pip-dot.searching { background: #3a7eff; animation: blink .5s step-end infinite; }
+.geo-pip-dot.live      { background: var(--green); }
+.geo-pip-dot.locked    { background: var(--amber); box-shadow: 0 0 6px var(--amber); animation: blink 1s step-end infinite; }
+
+.phase-pips { display: flex; gap: 6px; align-items: center; }
+.phase-pip { width: 5px; height: 5px; border-radius: 50%; background: #1e1000; transition: background .25s, box-shadow .25s, transform .25s; }
+.phase-pip.active { background: var(--amber); box-shadow: 0 0 6px rgba(232,112,0,0.7); transform: scale(1.45); }
+
+.back-btn {
+  margin-left: auto; background: none; border: 1px solid #1e1000;
+  color: #2e2010; font-family: 'DotGothic16', monospace;
+  font-size: 9px; letter-spacing: 0.1em; padding: 3px 9px;
+  border-radius: 3px; cursor: pointer; transition: color .15s, border-color .15s;
+}
+.back-btn:hover { color: var(--amber-dim); border-color: var(--amber-dim); }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.15} }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════
+     SETUP VIEW
+════════════════════════════════════════════════════════════ -->
+<div id="setup-view" class="view active">
+  <div class="setup-topbar">
+    <div class="brand">
+      <div class="brand-icon"></div>
+      LED SIGN CONFIGURATOR
+    </div>
+    <div class="topbar-div"></div>
+    <div class="topbar-fields">
+      <div class="fg">
+  <label>Voice</label>
+  <select id="voice-select" style="background: var(--setup-bg); border: 1px solid var(--setup-border); border-radius: 4px; color: var(--setup-text); font-family: 'Share Tech Mono', monospace; font-size: 11px; padding: 4px 8px; outline: none; width: 160px; cursor: pointer;">
+    <option value="">Loading voices...</option>
+  </select>
+</div>
+      <div class="fg">
+        <label>Line #</label>
+        <input type="text" id="input-line" placeholder="29" maxlength="6">
+      </div>
+      <div class="fg">
+        <label>Direction</label>
+        <input type="text" id="input-direction" placeholder="NORTHBOUND" maxlength="20">
+      </div>
+      <div class="fg">
+        <label>Destination</label>
+        <input type="text" id="input-destination" placeholder="DOWNTOWN" maxlength="24">
+      </div>
+    </div>
+    <button class="launch-btn" id="launch-btn">▶ LAUNCH DISPLAY</button>
+  </div>
+
+  <div class="setup-main">
+    <div class="setup-sidebar">
+      <div class="sidebar-header">
+        <h3>Bus Stops</h3>
+        <div class="stop-count-badge" id="stop-count">0</div>
+      </div>
+      <div class="stop-list" id="stop-list">
+        <div class="no-stops" id="no-stops-msg">
+          <span>🚏</span>
+          Click the map to add stops.<br>Place them in route order.
+        </div>
+      </div>
+      <div class="setup-statusbar">
+        <div class="status-dot" id="geo-status-dot"></div>
+        <span id="geo-status-text">Geolocation inactive</span>
+      </div>
+    </div>
+
+    <div class="map-wrap">
+      <div id="map"></div>
+      <div class="map-hint">
+        <strong>📍 Place Stops (in order)</strong>
+        Click map to drop a stop.<br>
+        Name it in the popup.<br>
+        Order determines sequence.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     DISPLAY VIEW
+════════════════════════════════════════════════════════════ -->
+<div id="display-view" class="view">
+  <div class="led-sign">
+    <div class="led-viewport" id="led-viewport">
+      <span class="led-text" id="led-text"></span>
+    </div>
+  </div>
+  <div class="led-status">
+    <div class="geo-pip">
+      <div class="geo-pip-dot searching" id="geo-pip-dot"></div>
+      <span id="geo-pip-text">GPS</span>
+    </div>
+    <div class="phase-pips" id="phase-pips"></div>
+    <button class="back-btn" id="back-btn">◀ SETUP</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ══════════════════════════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════════════════════════
+const GEO_RADIUS_M   = 25;    // metres — geofence trigger distance
+const SCROLL_PX_S    = 115;   // scroll speed in pixels / second
+const PAUSE_AFTER_MS = 700;   // pause after scroll completes before advancing
+const PHASE_DUR = [2200, 3000, 2200, 2200, 0]; // static wait per phase (0 = scroll-always)
+
+// ── SEQUENCE PHASE DEFINITIONS ────────────────────────────────
+// type: 'static' | 'auto' | 'always'
+//   static = never scrolls, just waits PHASE_DUR[i]
+//   auto   = scrolls only if text overflows, else waits PHASE_DUR[i]
+//   always = always scrolls regardless of length
+const PHASES = [
+  { label: 'next-stop-label', get: () => 'Next stop',                                                      type: 'static' },
+  { label: 'stop-name',       get: () => nextStopName(),                                                   type: 'auto'   },
+  { label: 'line',            get: () => cfg.line || '—',                                                  type: 'static' },
+  { label: 'direction',       get: () => 'Direction',                                    type: 'static' },
+  { label: 'bound-dest',      get: () => `${cfg.direction || '—'} to ${cfg.destination || '—'}`,          type: 'always' },
+];
+
+// ── APP STATE ─────────────────────────────────────────────────
+const stops = [];               // { lat, lng, name, marker }
+const cfg   = { line:'', direction:'', destination:'' };
+let   pos   = null;             // { lat, lng, acc }
+let   atStop       = null;      // stop object we're locked to, or null
+let   nextStopIdx  = 0;         // index into stops[] for next stop
+let   watchId      = null;
+
+// Sequence control
+let   seqRunning   = false;
+let   seqPhaseIdx  = 0;
+let   cancelCurrent = null;     // call to abort the currently displayed phase
+let ttsAnnouncedNextStop = -1; // Tracks the index of the last announced next stop
+
+// ══════════════════════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════════════════════
+function haversine(la1,lo1,la2,lo2) {
+  const R=6371000, r=Math.PI/180;
+  const dla=(la2-la1)*r, dlo=(lo2-lo1)*r;
+  const a=Math.sin(dla/2)**2+Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dlo/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function nextStopName() {
+  const s = stops[nextStopIdx];
+  return s ? s.name : (cfg.destination || '—');
+}
+
+function speak(text) {
+  if (!('speechSynthesis' in window)) return;
+  
+  window.speechSynthesis.cancel();
+  const msg = new SpeechSynthesisUtterance(text);
+  const voices = window.speechSynthesis.getVoices();
+  const selectedVoiceName = document.getElementById('voice-select').value;
+  
+  // Find the voice object that matches the dropdown selection
+  const selectedVoice = voices.find(v => v.name === selectedVoiceName);
+
+  if (selectedVoice) {
+    msg.voice = selectedVoice;
+  }
+
+  msg.rate = 0.85; 
+  msg.pitch = 1.0; 
+  window.speechSynthesis.speak(msg);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MAP & STOP MANAGEMENT
+// ══════════════════════════════════════════════════════════════
+const map = L.map('map',{zoomControl:true}).setView([43.6532,-79.3832],13);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+
+function makeIcon(idx) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:28px;height:28px;background:#E87000;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 0 10px rgba(232,112,0,0.5);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);color:#000;font-size:10px;font-weight:900;font-family:monospace;">${idx+1}</span></div>`,
+    iconSize:[28,28], iconAnchor:[14,28], popupAnchor:[0,-30],
+  });
+}
+
+map.on('click', e => placeStop(e.latlng.lat, e.latlng.lng));
+
+function placeStop(lat, lng) {
+  const idx    = stops.length;
+  const marker = L.marker([lat,lng],{icon:makeIcon(idx),draggable:true}).addTo(map);
+
+  const html = `
+    <div class="popup-title">Stop ${idx+1}
+      <input class="popup-name-input" type="text" id="pni" placeholder="e.g. King St & Bay" autofocus>
+    </div>
+    <button class="popup-save" id="psb">SAVE STOP</button>`;
+
+  const popup = L.popup({closeButton:true,minWidth:195}).setLatLng([lat,lng]).setContent(html).openOn(map);
+
+  setTimeout(() => {
+    const inp = document.getElementById('pni');
+    const btn = document.getElementById('psb');
+    if (!inp||!btn) return;
+    inp.focus();
+    const save = () => {
+      const name = inp.value.trim() || `Stop ${idx+1}`;
+      const obj  = { lat:marker.getLatLng().lat, lng:marker.getLatLng().lng, name, marker };
+      stops.push(obj);
+      marker.setIcon(makeIcon(stops.length-1));
+      marker.bindPopup(`<div class="popup-title">${name}</div>`);
+      marker.on('dragend', () => { obj.lat=marker.getLatLng().lat; obj.lng=marker.getLatLng().lng; renderList(); });
+      map.closePopup(popup);
+      renderList();
+    };
+    btn.addEventListener('click', save);
+    inp.addEventListener('keydown', e => { if (e.key==='Enter') save(); });
+  }, 100);
+
+  popup.on('remove', () => { if (!stops.some(s=>s.marker===marker)) map.removeLayer(marker); });
+}
+
+function renderList() {
+  const el    = document.getElementById('stop-list');
+  const noMsg = document.getElementById('no-stops-msg');
+  document.getElementById('stop-count').textContent = stops.length;
+  el.querySelectorAll('.stop-item').forEach(n => n.remove());
+  if (stops.length===0) { el.appendChild(noMsg); return; }
+  if (noMsg.parentNode) noMsg.parentNode.removeChild(noMsg);
+
+  stops.forEach((s,i) => {
+    const item = document.createElement('div');
+    item.className='stop-item'; item.dataset.idx=i;
+    item.innerHTML=`
+      <div class="stop-index">${i+1}</div>
+      <div class="stop-info">
+        <div class="stop-name-label">${s.name}</div>
+        <div class="stop-coords">${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}</div>
+      </div>
+      <button class="stop-delete">✕</button>`;
+    item.querySelector('.stop-delete').addEventListener('click', e => {
+      e.stopPropagation();
+      map.removeLayer(s.marker);
+      stops.splice(i,1);
+      stops.forEach((ss,ni) => ss.marker.setIcon(makeIcon(ni)));
+      if (nextStopIdx >= stops.length) nextStopIdx = Math.max(0, stops.length-1);
+      renderList();
+    });
+    item.addEventListener('click', () => { map.setView([s.lat,s.lng],16); s.marker.openPopup(); });
+    el.appendChild(item);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DISPLAY — SINGLE PHASE RENDERER
+//  Returns a Promise that resolves when the phase is done.
+//  Sets cancelCurrent so callers can abort early.
+// ══════════════════════════════════════════════════════════════
+function displayPhase(text, type, staticDurationMs) {
+  // Abort any previous phase immediately
+  if (cancelCurrent) { cancelCurrent(); cancelCurrent = null; }
+
+  let done;
+  let cancelled = false;
+
+  const p = new Promise(resolve => { done = resolve; });
+
+  const el = document.getElementById('led-text');
+  const vp = document.getElementById('led-viewport');
+
+  // Kill any running CSS transition immediately
+  el.style.transition = 'none';
+  el.style.transform  = 'translateX(0)';
+  el.style.textAlign  = '';
+  el.style.width      = '';
+  el.textContent      = text;
+
+  cancelCurrent = () => { cancelled = true; done(); };
+
+  // Wait two frames for layout, then decide scroll vs static
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (cancelled) return;
+
+      const textW = el.scrollWidth;
+      const vpW   = vp.clientWidth - 48; // subtract padding
+
+      const willScroll = type === 'always' || (type === 'auto' && textW > vpW);
+
+      if (!willScroll) {
+        // ── STATIC ────────────────────────────────────────────
+        el.style.textAlign = 'center';
+        el.style.width     = '100%';
+        const tid = setTimeout(() => { if (!cancelled) done(); }, staticDurationMs);
+        cancelCurrent = () => { cancelled=true; clearTimeout(tid); done(); };
+
+      } else {
+        // ── SCROLL right → left ───────────────────────────────
+        // Re-measure full text width after centering is cleared
+        el.style.textAlign = 'left';
+        el.style.width     = 'max-content';
+
+        const fullTextW = el.scrollWidth;
+        const startX    = vpW + 48;          // just off right edge (inside padding)
+        const endX      = -(fullTextW + 24); // just off left edge
+        const distance  = startX - endX;
+        const durMs     = (distance / SCROLL_PX_S) * 1000;
+
+        // Place text off-screen right, no transition
+        el.style.transition = 'none';
+        el.style.transform  = `translateX(${startX}px)`;
+
+        // Trigger smooth scroll on next frame pair
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (cancelled) return;
+            el.style.transition = `transform ${durMs}ms linear`;
+            el.style.transform  = `translateX(${endX}px)`;
+
+            // Resolve after scroll + short pause
+            const tid = setTimeout(() => {
+              if (!cancelled) done();
+            }, durMs + PAUSE_AFTER_MS);
+
+            cancelCurrent = () => { cancelled=true; clearTimeout(tid); done(); };
+          });
+        });
+      }
+    });
+  });
+
+  return p;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SEQUENCE A — cycle through all phases
+// ══════════════════════════════════════════════════════════════
+function buildPips() {
+  const c = document.getElementById('phase-pips');
+  c.innerHTML = '';
+  PHASES.forEach((_,i) => {
+    const d = document.createElement('div');
+    d.className='phase-pip'; d.dataset.i=i;
+    c.appendChild(d);
+  });
+}
+
+function setPip(idx) {
+  document.querySelectorAll('.phase-pip').forEach(p => {
+    p.classList.toggle('active', parseInt(p.dataset.i)===idx);
+  });
+}
+
+async function runSequenceA() {
+  seqRunning = true;
+  while (seqRunning && !atStop) {
+    const ph = PHASES[seqPhaseIdx];
+    setPip(seqPhaseIdx);
+    await displayPhase(ph.get(), ph.type, PHASE_DUR[seqPhaseIdx]);
+    if (!seqRunning || atStop) break;
+    seqPhaseIdx = (seqPhaseIdx + 1) % PHASES.length;
+  }
+}
+
+function startSequenceA(fromPhase = 0) {
+  seqRunning  = false;                         // stop any old loop
+  if (cancelCurrent) { cancelCurrent(); cancelCurrent = null; }
+  seqPhaseIdx = fromPhase;
+  buildPips();
+  
+  // --- ADDED TTS CHECK ---
+  if (stops[nextStopIdx] && ttsAnnouncedNextStop !== nextStopIdx) {
+    speak(`Next stop, ${stops[nextStopIdx].name}`);
+    ttsAnnouncedNextStop = nextStopIdx; // Prevent looping
+  }
+  // -----------------------
+
+  runSequenceA();
+}
+
+function stopSequenceA() {
+  seqRunning = false;
+  if (cancelCurrent) { cancelCurrent(); cancelCurrent = null; }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  AT-STOP MODE — show only stop name, loop until exit
+// ══════════════════════════════════════════════════════════════
+async function runAtStopLoop(stop) {
+  while (atStop === stop) {
+    await displayPhase(stop.name, 'auto', 3500);
+  }
+}
+
+function enterAtStop(stop) {
+  if (atStop === stop) return;
+  stopSequenceA();
+  atStop = stop;
+
+  // --- ADDED TTS ---
+  speak(`Arriving at, ${stop.name}`);
+  // -----------------
+
+  // Dim the sequence pips
+  document.getElementById('phase-pips').style.opacity = '0';
+  setGeoPip('locked', 'AT STOP');
+
+  runAtStopLoop(stop);
+}
+
+function exitAtStop(stop) {
+  // Advance nextStopIdx to the stop after the one we just left
+  const idx = stops.indexOf(stop);
+  if (idx !== -1) nextStopIdx = Math.min(idx + 1, stops.length - 1);
+
+  atStop = null;
+  document.getElementById('phase-pips').style.opacity = '1';
+
+  // Resume sequence A from the beginning
+  startSequenceA(0);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  GEOLOCATION
+// ══════════════════════════════════════════════════════════════
+let userMarker = null, accCircle = null;
+
+function startWatch() {
+  if (!navigator.geolocation) return;
+  watchId = navigator.geolocation.watchPosition(onPos, err => console.warn(err),
+    { enableHighAccuracy: true, maximumAge: 4000, timeout: 15000 });
+}
+
+function onPos(gpos) {
+  const { latitude: lat, longitude: lng, accuracy: acc } = gpos.coords;
+  pos = { lat, lng, acc };
+
+  // Setup sidebar status
+  document.getElementById('geo-status-dot').classList.add('active');
+  document.getElementById('geo-status-text').textContent = `GPS ±${Math.round(acc)}m`;
+
+  // User marker on map
+  if (!userMarker) {
+    const icon = L.divIcon({className:'',html:`<div style="width:13px;height:13px;background:#3a7eff;border-radius:50%;border:2.5px solid rgba(255,255,255,0.9);box-shadow:0 0 0 4px rgba(58,126,255,0.22);"></div>`,iconSize:[13,13],iconAnchor:[6.5,6.5]});
+    userMarker = L.marker([lat,lng],{icon,zIndexOffset:1000}).addTo(map);
+    accCircle  = L.circle([lat,lng],{radius:acc,color:'#3a7eff',fillColor:'#3a7eff',fillOpacity:0.07,weight:1}).addTo(map);
+    map.setView([lat,lng],15);
+  } else {
+    userMarker.setLatLng([lat,lng]);
+    accCircle.setLatLng([lat,lng]).setRadius(acc);
+  }
+
+  if (!atStop) setGeoPip('live', `±${Math.round(acc)}m`);
+  geofenceCheck(lat, lng);
+}
+
+function geofenceCheck(lat, lng) {
+  if (stops.length === 0) return;
+
+  // Find any stop within GEO_RADIUS
+  let hit = null;
+  for (const s of stops) {
+    if (haversine(lat, lng, s.lat, s.lng) <= GEO_RADIUS_M) { hit = s; break; }
+  }
+
+  if (hit) {
+    // Highlight in sidebar
+    const hitIdx = stops.indexOf(hit);
+    document.querySelectorAll('.stop-item').forEach(el =>
+      el.classList.toggle('at-stop', parseInt(el.dataset.idx) === hitIdx));
+
+    if (atStop !== hit) enterAtStop(hit);
+  } else {
+    document.querySelectorAll('.stop-item').forEach(el => el.classList.remove('at-stop'));
+    if (atStop !== null) {
+      const left = atStop;
+      atStop = null;   // clear first so loop sees the exit
+      exitAtStop(left);
+    }
+  }
+}
+
+function setGeoPip(state, text) {
+  document.getElementById('geo-pip-dot').className = `geo-pip-dot ${state}`;
+  document.getElementById('geo-pip-text').textContent = text;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  VIEW SWITCHING
+// ══════════════════════════════════════════════════════════════
+document.getElementById('launch-btn').addEventListener('click', () => {
+  cfg.line        = document.getElementById('input-line').value.trim().toUpperCase() || '—';
+  cfg.direction   = document.getElementById('input-direction').value.trim().toUpperCase() || '—';
+  cfg.destination = document.getElementById('input-destination').value.trim() || '—';
+
+  // Inside the launch-btn click listener
+  nextStopIdx = 0;
+  atStop      = null;
+  ttsAnnouncedNextStop = -1; // --- ADDED TTS RESET ---
+
+  document.getElementById('setup-view').classList.remove('active');
+  document.getElementById('display-view').classList.add('active');
+
+  setGeoPip('searching', 'GPS');
+  if (watchId === null) startWatch();
+  startSequenceA(0);
+});
+
+document.getElementById('back-btn').addEventListener('click', () => {
+  stopSequenceA();
+  atStop = null;
+
+  // Instant reset of text element
+  const el = document.getElementById('led-text');
+  el.style.transition = 'none';
+  el.style.transform  = 'translateX(0)';
+  el.textContent      = '';
+
+  document.getElementById('display-view').classList.remove('active');
+  document.getElementById('setup-view').classList.add('active');
+});
+
+// ══════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════
+navigator.geolocation && navigator.geolocation.getCurrentPosition(
+  p => map.setView([p.coords.latitude, p.coords.longitude], 15),
+  () => {}
+);
+startWatch();
+renderList();
+
+function populateVoiceList() {
+  if (!('speechSynthesis' in window)) return;
+  
+  const voiceSelect = document.getElementById('voice-select');
+  const voices = window.speechSynthesis.getVoices();
+  
+  // Clear the "Loading..." option
+  voiceSelect.innerHTML = '';
+
+  voices.forEach((voice) => {
+    const option = document.createElement('option');
+    option.textContent = `${voice.name} (${voice.lang})`;
+    option.value = voice.name;
+    
+    // Default to Google UK English Male if it exists
+    if (voice.name === 'Google UK English Male') {
+      option.selected = true;
+    }
+    
+    voiceSelect.appendChild(option);
+  });
+}
+
+// Trigger population when voices are loaded
+window.speechSynthesis.onvoiceschanged = populateVoiceList;
+// Also try immediately for browsers that load fast
+populateVoiceList();
+</script>
+</body>
+</html>
