@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -346,10 +347,25 @@ let   seqRunning   = false;
 let   seqPhaseIdx  = 0;
 let   cancelCurrent = null;     // call to abort the currently displayed phase
 let ttsAnnouncedNextStop = -1; // Tracks the index of the last announced next stop
+let periodicAnnouncementTimer = null;
+const ANNOUNCEMENT_INTERVAL_MS = 60000; // 1 minute
 
 // ══════════════════════════════════════════════════════════════
 //  HELPERS
 // ══════════════════════════════════════════════════════════════
+
+function resetPeriodicAnnouncement() {
+  if (periodicAnnouncementTimer) clearInterval(periodicAnnouncementTimer);
+  
+  periodicAnnouncementTimer = setInterval(() => {
+    // Only announce if we aren't currently speaking and aren't at a stop
+    if (!window.speechSynthesis.speaking && !atStop) {
+      const lineNum = cfg.line || "unknown";
+      const dest = cfg.destination || "destination";
+      speak(`Line ${lineNum}, to, ${dest}`);
+    }
+  }, ANNOUNCEMENT_INTERVAL_MS);
+}
 function haversine(la1,lo1,la2,lo2) {
   const R=6371000, r=Math.PI/180;
   const dla=(la2-la1)*r, dlo=(lo2-lo1)*r;
@@ -575,18 +591,25 @@ async function runSequenceA() {
 }
 
 function startSequenceA(fromPhase = 0) {
-  seqRunning  = false;                         // stop any old loop
+  seqRunning  = false;
   if (cancelCurrent) { cancelCurrent(); cancelCurrent = null; }
   seqPhaseIdx = fromPhase;
   buildPips();
-  
-  // --- ADDED TTS CHECK ---
-  if (stops[nextStopIdx] && ttsAnnouncedNextStop !== nextStopIdx) {
-    speak(`Next stop, ${stops[nextStopIdx].name}`);
-    ttsAnnouncedNextStop = nextStopIdx; // Prevent looping
-  }
-  // -----------------------
 
+  const isLastStop = (nextStopIdx === stops.length - 1);
+  
+  // Update LED text for Phase 0 dynamically
+  PHASES[0].get = () => isLastStop ? "Last stop" : "Next stop";
+  
+  // TTS Announcement
+  if (stops[nextStopIdx] && ttsAnnouncedNextStop !== nextStopIdx) {
+    const prefix = isLastStop ? "Last stop" : "Next stop";
+    speak(`${prefix}, ${stops[nextStopIdx].name}`);
+    ttsAnnouncedNextStop = nextStopIdx;
+  }
+
+  // Restart the 1-minute timer whenever the main sequence starts/resumes
+  resetPeriodicAnnouncement();
   runSequenceA();
 }
 
@@ -608,12 +631,15 @@ function enterAtStop(stop) {
   if (atStop === stop) return;
   stopSequenceA();
   atStop = stop;
+  
+  // Stop periodic announcements while parked at a stop
+  if (periodicAnnouncementTimer) clearInterval(periodicAnnouncementTimer);
 
-  // --- ADDED TTS ---
-  speak(`Arriving at, ${stop.name}`);
-  // -----------------
+  const isLastStop = (stops.indexOf(stop) === stops.length - 1);
+  const suffix = isLastStop ? ". Last stop." : "";
+  
+  speak(`Arriving at, ${stop.name}${suffix}`);
 
-  // Dim the sequence pips
   document.getElementById('phase-pips').style.opacity = '0';
   setGeoPip('locked', 'AT STOP');
 
@@ -720,6 +746,8 @@ document.getElementById('launch-btn').addEventListener('click', () => {
 
 document.getElementById('back-btn').addEventListener('click', () => {
   stopSequenceA();
+  if (periodicAnnouncementTimer) clearInterval(periodicAnnouncementTimer); // ADD THIS
+  window.speechSynthesis.cancel(); // ADD THIS
   atStop = null;
 
   // Instant reset of text element
